@@ -13,8 +13,8 @@ services:
     restart: always
 
   wavelog:
-    image: ghcr.io/uiolee/wavelog:2.4.1-0.1
-    # image: docker.io/uiolee/wavelog:2.4.1-0.1
+    image: ghcr.io/uiolee/wavelog:2.4.1-0.2
+    # image: docker.io/uiolee/wavelog:2.4.1-0.2
     networks:
       - default
     user: "1000:1000"

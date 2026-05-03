@@ -111,5 +111,5 @@ LABEL \
     org.opencontainers.image.source="https://github.com/uiolee/wavelog-container" \
     org.opencontainers.image.title="wavelog" \
     org.opencontainers.image.url="https://github.com/uiolee/wavelog-container" \
-    org.opencontainers.image.version="${WAVELOG_GITTAG}-0.1" \
+    org.opencontainers.image.version="${WAVELOG_GITTAG}-0.2" \
     wavelog.gittag="${WAVELOG_GITTAG}"

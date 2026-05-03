@@ -13,8 +13,8 @@ Images avaliable in registries:
 
 | Registry                         | Tag                                  |
 | -------------------------------- | ------------------------------------ |
-| [Github Packages][githubpackage] | `ghcr.io/uiolee/wavelog:2.4.1-0.1`   |
-| [Docker Hub][dockerhub]          | `docker.io/uiolee/wavelog:2.4.1-0.1` |
+| [Github Packages][githubpackage] | `ghcr.io/uiolee/wavelog:2.4.1-0.2`   |
+| [Docker Hub][dockerhub]          | `docker.io/uiolee/wavelog:2.4.1-0.2` |
 
 ## Compose
 
