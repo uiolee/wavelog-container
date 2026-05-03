@@ -1,0 +1,40 @@
+services:
+  mariadb: # setup a new mariadb container if you dont have a database.
+    image: docker.io/library/mariadb:lts
+    environment:
+      MARIADB_RANDOM_ROOT_PASSWORD: 1
+      MARIADB_DATABASE: example_databasename_rpm32hvpb27zuhkd
+      MARIADB_USER: example_username_vp429sso5nohoc3z
+      MARIADB_PASSWORD: example_password_h5i7ym4rg495wsvw
+    networks:
+      - default
+    volumes:
+      - ./mariadb_data:/var/lib/mysql:Z
+    restart: always
+
+  wavelog:
+    image: ghcr.io/uiolee/wavelog:2.4.1-0.1
+    # image: docker.io/uiolee/wavelog:2.4.1-0.1
+    networks:
+      - default
+    user: "1000:1000"
+    volumes:
+      # chown -R 1000:1000 ./config ./uploads ./userdata ./updates
+      # chmod -R 2775 ./config ./uploads ./userdata ./updates
+      - ./config:/wavelog/config
+      - ./uploads:/wavelog/uploads
+      - ./userdata:/wavelog/userdata
+      - ./updates:/wavelog/updates
+      # - ./wavelog.lighttpd.conf /etc/lighttpd/lighttpd.conf  # if you want to use your own `lighttpd.conf`
+      # - ./wavelog.phpfpm.conf /etc/php84/php-fpm.d/www.conf  # if you want to use your own `php-fpm.conf`
+    ports:
+      - "57373:8080"
+    healthcheck:
+      test: "wget -q -O - http://127.0.0.1:8080/index.php/cron/run || exit 1"
+      interval: 1m
+      timeout: 15s
+      retries: 5
+    restart: always
+
+networks:
+  default: {}

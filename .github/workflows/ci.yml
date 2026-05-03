@@ -1,0 +1,121 @@
+name: CI
+
+on:
+  push:
+    branches: ["main"]
+    tags: ["*"]
+    paths:
+      - ".github/workflows/**"
+      - "sbin/**"
+      - "*[Cc]ontainer**"
+      - "**.md"
+
+  pull_request:
+    branches: ["main"]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: false
+
+      - name: test build
+        env:
+          repo: ${{ github.repository }}
+          sha: ${{ github.sha }}
+        run: |
+          export tag=${repo}:${sha}-$(date +%s)
+
+          podman build . --tag ${tag}
+
+          echo -e "\n## Test\n" >> $GITHUB_STEP_SUMMARY
+          podman image tree ${tag} | tee -a $GITHUB_STEP_SUMMARY
+          echo >> $GITHUB_STEP_SUMMARY
+
+  build-push:
+    needs: test
+    if: ${{ github.event_name == 'push' }}
+    name: Build and Push Image
+    permissions:
+      contents: read
+      attestations: write
+      packages: write
+      id-token: write # needed for signing the images with GitHub OIDC Token
+      artifact-metadata: write
+    env:
+      IMAGE_NAME: "${{ github.repository_owner }}/wavelog"
+      REF_NAME: ${{ github.ref_name }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: false
+
+      - name: Install qemu dependency
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qemu-user-static
+
+      - name: Build Image
+        id: build_image
+        uses: redhat-actions/buildah-build@v2
+        with:
+          tags: |
+            ghcr.io/${{ env.IMAGE_NAME }}:${{ env.REF_NAME }}
+            docker.io/${{ env.IMAGE_NAME }}:${{ env.REF_NAME }}
+          # archs: "amd64,arm64"
+          platforms: "linux/amd64,linux/arm64"
+          containerfiles: Containerfile
+          oci: true
+
+      - name: print build outputs
+        run: |
+          echo >> $GITHUB_STEP_SUMMARY
+          echo -e "\n## buildah-build Action Outputs\n" >> $GITHUB_STEP_SUMMARY
+          echo "${{ toJSON(steps.build_image.outputs) }}" | tee -a $GITHUB_STEP_SUMMARY
+          echo >> $GITHUB_STEP_SUMMARY
+
+      - name: Check images created
+        run: |
+          echo >> $GITHUB_STEP_SUMMARY
+          echo -e "\n## Images list\n" >> $GITHUB_STEP_SUMMARY
+          buildah images | grep '${{ env.IMAGE_NAME }}' | tee -a $GITHUB_STEP_SUMMARY
+          echo >> $GITHUB_STEP_SUMMARY
+
+          echo >> $GITHUB_STEP_SUMMARY
+          echo -e "\n## Image tree\n" >> $GITHUB_STEP_SUMMARY
+          podman image tree '${{ env.IMAGE_NAME }}:${{ env.REF_NAME }}' | tee -a $GITHUB_STEP_SUMMARY
+          echo >> $GITHUB_STEP_SUMMARY
+
+          buildah inspect '${{ env.IMAGE_NAME }}:${{ env.REF_NAME }}'
+
+      - name: Push To ghcr.io
+        uses: redhat-actions/push-to-registry@v2
+        id: push_ghcr
+        with:
+          tags: ghcr.io/${{ env.IMAGE_NAME }}:${{ env.REF_NAME }}
+          username: ${{ secrets.registry_username || github.repository_owner }}
+          password: ${{ secrets.registry_password || secrets.GITHUB_TOKEN }}
+
+      - name: Push To docker.io
+        uses: redhat-actions/push-to-registry@v2
+        id: push_dch
+        with:
+          tags: docker.io/${{ env.IMAGE_NAME }}:${{ env.REF_NAME }}
+          username: ${{ secrets.registry_username || github.repository_owner }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: print push outputs
+        run: |
+          echo >> $GITHUB_STEP_SUMMARY
+          echo -e "\n## push-to-registry Action Outputs\n" >> $GITHUB_STEP_SUMMARY
+          echo "${{ toJSON(steps.push_ghcr.outputs) }}" | tee -a $GITHUB_STEP_SUMMARY
+          echo -e "\n\n" >> $GITHUB_STEP_SUMMARY
+          echo "${{ toJSON(steps.push_dch.outputs) }}" | tee -a $GITHUB_STEP_SUMMARY
+          echo >> $GITHUB_STEP_SUMMARY

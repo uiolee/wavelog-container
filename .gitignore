@@ -1,0 +1,6 @@
+/wavelog*
+*.pem
+*.log
+*.zip
+example/mariadb_data
+repositories

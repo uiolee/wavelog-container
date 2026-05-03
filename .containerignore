@@ -1,0 +1,15 @@
+
+**/.editorconfig
+**/.git
+**/.github
+**/Dockerfile
+**/.dockerignore
+**/.gitignore
+
+/var/log/*/*.log
+
+**/application/config/config.php
+**/application/config/database.php
+**/application/config/memcached.php
+**/application/config/redis.php
+**/application/config/sso.php
