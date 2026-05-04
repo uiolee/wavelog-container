@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: ["main"]
+    branches: ["dev"]
     tags: ["*"]
     paths:
       - ".github/workflows/**"
@@ -11,7 +11,7 @@ on:
       - "**.md"
 
   pull_request:
-    branches: ["main"]
+    branches: ["dev"]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -24,16 +24,48 @@ jobs:
         with:
           submodules: false
 
-      - name: test build
+      - name: Get git last commit time
+        id: git_log
+        run: |
+          echo "GIT_LOG_TIMEISO=$(git log -1 --pretty=%cI)" | tee -a $GITHUB_OUTPUT | tee -a $GITHUB_STEP_SUMMARY
+          echo "GIT_LOG_TIMESTAMP=$(git log -1 --pretty=%ct)" | tee -a $GITHUB_OUTPUT | tee -a $GITHUB_STEP_SUMMARY
+          echo >> $GITHUB_STEP_SUMMARY
+
+      - name: ${{ env.BIN }} build
         env:
           repo: ${{ github.repository }}
           sha: ${{ github.sha }}
+          TIMESTAMP: ${{ steps.git_log.outputs.GIT_LOG_TIMESTAMP }}
+          SOURCE_DATE_EPOCH: ${{ steps.git_log.outputs.GIT_LOG_TIMESTAMP }}
+          BIN: podman
         run: |
-          export tag=${repo}:${sha}-$(date +%s)
+          export tag=${repo}:${sha}-${SOURCE_DATE_EPOCH}-${BIN}
 
-          podman build . --tag ${tag}
+          ${BIN} -v && ${BIN} version
+          echo "::group::${BIN} build"
+          ${BIN} build --tag ${tag} --source-date-epoch ${SOURCE_DATE_EPOCH} . || ${BIN} build --tag ${tag} --timestamp ${TIMESTAMP} .
+          echo "::endgroup::"
 
-          echo -e "\n## Test\n" >> $GITHUB_STEP_SUMMARY
+          echo -e "\n## Test ${{ env.BIN }} build\n" >> $GITHUB_STEP_SUMMARY
+          podman image tree ${tag} | tee -a $GITHUB_STEP_SUMMARY
+          echo >> $GITHUB_STEP_SUMMARY
+
+      - name: ${{ env.BIN }} build
+        env:
+          repo: ${{ github.repository }}
+          sha: ${{ github.sha }}
+          SOURCE_DATE_EPOCH: ${{ steps.git_log.outputs.GIT_LOG_TIMESTAMP }}
+          TIMESTAMP: ${{ steps.git_log.outputs.GIT_LOG_TIMESTAMP }}
+          BIN: buildah
+        run: |
+          export tag=${repo}:${sha}-${SOURCE_DATE_EPOCH}-${BIN}
+
+          ${BIN} -v && ${BIN} version
+          echo "::group::${BIN} build"
+          ${BIN} build --tag ${tag} --source-date-epoch ${SOURCE_DATE_EPOCH} . || ${BIN} build --tag ${tag} --timestamp ${TIMESTAMP} .
+          echo "::endgroup::"
+
+          echo -e "\n## Test ${{ env.BIN }} build\n" >> $GITHUB_STEP_SUMMARY
           podman image tree ${tag} | tee -a $GITHUB_STEP_SUMMARY
           echo >> $GITHUB_STEP_SUMMARY
 
@@ -50,6 +82,8 @@ jobs:
     env:
       IMAGE_NAME: "${{ github.repository_owner }}/wavelog"
       REF_NAME: ${{ github.ref_name }}
+      TIMESTAMP: "0"
+      SOURCE_DATE_EPOCH: "0"
     runs-on: ubuntu-latest
 
     steps:
@@ -57,35 +91,60 @@ jobs:
         with:
           submodules: false
 
+      - name: Get git last commit time
+        id: git_log
+        run: |
+          DT=$(git log -1 --pretty=%cI)
+          TS=$(git log -1 --pretty=%ct)
+          echo "GIT_LOG_TIMEISO=${DT}" | tee -a $GITHUB_OUTPUT | tee -a $GITHUB_STEP_SUMMARY
+          echo "GIT_LOG_TIMESTAMP=${TS}" | tee -a $GITHUB_OUTPUT | tee -a $GITHUB_STEP_SUMMARY
+          echo >> $GITHUB_STEP_SUMMARY
+
+          echo "TIMESTAMP=${TS}" | tee -a $GITHUB_ENV
+          echo "SOURCE_DATE_EPOCH=${TS}" | tee -a $GITHUB_ENV
+
       - name: Install qemu dependency
         run: |
           sudo apt-get update
           sudo apt-get install -y qemu-user-static
 
       - name: Build Image
-        id: build_image
+        id: build_e
+        continue-on-error: true
         uses: redhat-actions/buildah-build@v2
         with:
-          tags: |
-            ghcr.io/${{ env.IMAGE_NAME }}:${{ env.REF_NAME }}
-            docker.io/${{ env.IMAGE_NAME }}:${{ env.REF_NAME }}
+          tags: ghcr.io/${{ env.IMAGE_NAME }}:${{ env.REF_NAME }} docker.io/${{ env.IMAGE_NAME }}:${{ env.REF_NAME }}
           # archs: "amd64,arm64"
           platforms: "linux/amd64,linux/arm64"
           containerfiles: Containerfile
           oci: true
+          extra-args: --source-date-epoch ${{ env.SOURCE_DATE_EPOCH }}
+
+      - name: Build Image
+        id: build_t
+        if: ${{ steps.build_e.outcome == 'failure' }}
+        uses: redhat-actions/buildah-build@v2
+        with:
+          tags: ghcr.io/${{ env.IMAGE_NAME }}:${{ env.REF_NAME }} docker.io/${{ env.IMAGE_NAME }}:${{ env.REF_NAME }}
+          # archs: "amd64,arm64"
+          platforms: "linux/amd64,linux/arm64"
+          containerfiles: Containerfile
+          oci: true
+          extra-args: --timestamp ${{ env.TIMESTAMP }}
 
       - name: print build outputs
         run: |
           echo >> $GITHUB_STEP_SUMMARY
           echo -e "\n## buildah-build Action Outputs\n" >> $GITHUB_STEP_SUMMARY
-          echo "${{ toJSON(steps.build_image.outputs) }}" | tee -a $GITHUB_STEP_SUMMARY
+          echo "${{ toJSON(steps.build_e.outputs) }}" | tee -a $GITHUB_STEP_SUMMARY
+          echo "${{ toJSON(steps.build_t.outputs) }}" | tee -a $GITHUB_STEP_SUMMARY
           echo >> $GITHUB_STEP_SUMMARY
 
       - name: Check images created
         run: |
           echo >> $GITHUB_STEP_SUMMARY
           echo -e "\n## Images list\n" >> $GITHUB_STEP_SUMMARY
-          buildah images | grep '${{ env.IMAGE_NAME }}' | tee -a $GITHUB_STEP_SUMMARY
+          buildah images -a --digests | grep '${{ env.IMAGE_NAME }}' | tee -a $GITHUB_STEP_SUMMARY
           echo >> $GITHUB_STEP_SUMMARY
 
           echo >> $GITHUB_STEP_SUMMARY
@@ -93,7 +152,9 @@ jobs:
           podman image tree '${{ env.IMAGE_NAME }}:${{ env.REF_NAME }}' | tee -a $GITHUB_STEP_SUMMARY
           echo >> $GITHUB_STEP_SUMMARY
 
+          echo "::group::buildah inspect"
           buildah inspect '${{ env.IMAGE_NAME }}:${{ env.REF_NAME }}'
+          echo "::endgroup::"
 
       - name: Push To ghcr.io
         uses: redhat-actions/push-to-registry@v2

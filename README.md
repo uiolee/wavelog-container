@@ -1,4 +1,4 @@
-# wavelog-container
+# [wavelog-container](https://github.com/uiolee/wavelog-container/)
 
 Container Images of [wavelog/wavelog](https://github.com/wavelog/wavelog), run with [`lighttpd`](https://pkgs.alpinelinux.org/packages?name=lighttpd) and [`php84-fpm`](https://pkgs.alpinelinux.org/packages?name=php84-fpm) in [Alpine](https://hub.docker.com/_/alpine/).
 
@@ -7,7 +7,7 @@ Container Images of [wavelog/wavelog](https://github.com/wavelog/wavelog), run w
 
 ## Images
 
-[![docker.io Image Size)](https://img.shields.io/docker/image-size/uiolee/wavelog/main)][dockerhub]
+[![docker.io Image Size)](https://img.shields.io/docker/image-size/uiolee/wavelog/dev)][dockerhub]
 
 Images avaliable in registries:
 
